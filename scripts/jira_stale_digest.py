@@ -18,7 +18,8 @@ EMAIL = os.environ["JIRA_EMAIL"]
 TOKEN = os.environ["JIRA_API_TOKEN"]
 JQL = os.environ.get("JQL", "project = HWSTAGE AND statusCategory != Done ORDER BY created DESC")
 
-STALE_DAYS = 3
+STALE_DAYS = 2
+STALE_STATUSES = {"打开", "重新打开", "正在进行", "Open", "Reopened", "In Progress"}
 
 
 def jira_get(path, params):
@@ -72,7 +73,7 @@ def main():
             "last_activity": last_dt.date().isoformat(),
         }
         rows.append(row)
-        if last_dt < cutoff:
+        if last_dt < cutoff and row["status"] in STALE_STATUSES:
             stale_rows.append(row)
 
     blocks = [
@@ -128,7 +129,7 @@ def main():
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": ":white_check_mark: 没有超过3天无人回复的 issue",
+                    "text": f":white_check_mark: 没有超过{STALE_DAYS}天无人回复的 issue",
                 },
             }
         )
