@@ -36,8 +36,10 @@ def jira_get(path, params):
 def main():
     import urllib.parse  # noqa: E401
 
+    # Atlassian retired GET /rest/api/3/search (returns 410 Gone);
+    # use the newer /rest/api/3/search/jql endpoint instead.
     data = jira_get(
-        "/rest/api/3/search",
+        "/rest/api/3/search/jql",
         {
             "jql": JQL,
             "fields": "summary,status,assignee,created,comment",
