@@ -1,0 +1,28 @@
+name: HWSTAGE Jira Daily Digest
+
+on:
+  schedule:
+    # 00:00 UTC = 08:00 中国标准时间 (UTC+8)
+    - cron: "0 0 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  jira-digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query HWSTAGE open issues and find stale ones (>3 days no reply)
+        id: analyze
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}          # e.g. https://sonosinc.atlassian.net
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JQL: "project = HWSTAGE AND statusCategory != Done ORDER BY created DESC"
+        run: python3 scripts/jira_stale_digest.py
+
+      - name: Send report to Slack
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          curl -s -X POST -H 'Content-type: application/json' \
+            --data "$(cat digest.json)" \
+            "$SLACK_WEBHOOK_URL"
