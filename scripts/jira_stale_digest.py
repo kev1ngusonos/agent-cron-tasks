@@ -75,16 +75,83 @@ def main():
         if last_dt < cutoff:
             stale_rows.append(row)
 
-    lines = [f"*HWSTAGE 每日检查 — {now.date().isoformat()}*", f"Open issues: {len(rows)}"]
-    if stale_rows:
-        lines.append(f"\n:warning: *超过 {STALE_DAYS} 天无人回复 ({len(stale_rows)}):*")
-        for r in stale_rows:
-            url = f"{BASE_URL}/browse/{r['key']}"
-            lines.append(f"• <{url}|{r['key']}> {r['summary']} — {r['assignee']} (最后活动 {r['last_activity']})")
-    else:
-        lines.append("\n:white_check_mark: 没有超过3天无人回复的 issue")
+    blocks = [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": f"📋 HWSTAGE 每日检查 — {now.date().isoformat()}",
+                "emoji": True,
+            },
+        },
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"Open issues: *{len(rows)}*"},
+        },
+        {"type": "divider"},
+    ]
 
-    payload = {"text": "\n".join(lines)}
+    if stale_rows:
+        blocks.append(
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f":warning: *超过 {STALE_DAYS} 天无人回复 ({len(stale_rows)}):*",
+                },
+            }
+        )
+        # Slack section "fields" max is 10 per block, so chunk every 5 issues
+        # (2 fields per issue: title/link and assignee/last-activity).
+        for i in range(0, len(stale_rows), 5):
+            chunk = stale_rows[i : i + 5]
+            fields = []
+            for r in chunk:
+                issue_url = f"{BASE_URL}/browse/{r['key']}"
+                fields.append(
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*<{issue_url}|{r['key']}>*\n{r['summary']}",
+                    }
+                )
+                fields.append(
+                    {
+                        "type": "mrkdwn",
+                        "text": f"👤 {r['assignee']}\n🕐 最后活动 {r['last_activity']}",
+                    }
+                )
+            blocks.append({"type": "section", "fields": fields})
+            blocks.append({"type": "divider"})
+    else:
+        blocks.append(
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": ":white_check_mark: 没有超过3天无人回复的 issue",
+                },
+            }
+        )
+        blocks.append({"type": "divider"})
+
+    blocks.append(
+        {
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "查看全部 Jira", "emoji": True},
+                    "url": f"{BASE_URL}/issues/?jql={urllib.parse.quote(JQL)}",
+                }
+            ],
+        }
+    )
+
+    # Slack requires a top-level "text" fallback for notifications/screen readers.
+    payload = {
+        "text": f"HWSTAGE 每日检查 — {now.date().isoformat()}: {len(stale_rows)} 个超期未回复",
+        "blocks": blocks,
+    }
     with open("digest.json", "w") as fh:
         json.dump(payload, fh, ensure_ascii=False)
 
