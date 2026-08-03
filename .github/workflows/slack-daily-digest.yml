@@ -1,0 +1,37 @@
+name: Slack Daily Unread Digest
+
+on:
+  schedule:
+    # 23:00 UTC = 07:00 中国标准时间 (UTC+8)
+    - cron: "0 23 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write   # to commit updated slack_digest_state.json
+  models: read       # to call GitHub Models for summarization
+
+jobs:
+  slack-digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Slack digest
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_DIGEST_BOT_TOKEN }}
+          SLACK_USER_ID: ${{ secrets.SLACK_DIGEST_USER_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/slack_digest.py
+
+      - name: Commit updated read-state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add scripts/slack_digest_state.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: update Slack digest read-state [skip ci]"
+            git push
+          else
+            echo "No state changes to commit."
+          fi
