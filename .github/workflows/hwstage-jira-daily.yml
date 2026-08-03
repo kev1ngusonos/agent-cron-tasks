@@ -10,6 +10,9 @@ jobs:
   jira-digest:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Query HWSTAGE open issues and find stale ones (>3 days no reply)
         id: analyze
         env:
