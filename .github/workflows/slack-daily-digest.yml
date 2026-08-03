@@ -19,6 +19,7 @@ jobs:
 
       - name: Run Slack digest
         env:
+          SLACK_USER_TOKEN: ${{ secrets.SLACK_DIGEST_USER_TOKEN }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_DIGEST_BOT_TOKEN }}
           SLACK_USER_ID: ${{ secrets.SLACK_DIGEST_USER_ID }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

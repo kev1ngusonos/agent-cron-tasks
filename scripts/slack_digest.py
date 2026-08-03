@@ -10,9 +10,17 @@ Daily Slack unread-messages digest.
    Chinese digest grouped by channel.
 4. DMs the digest to SLACK_USER_ID via the bot's chat.postMessage.
 
+Reading is done with YOUR OWN Slack user token (xoxp) so no bot ever has to
+join any of your channels - it simply reads whatever you, the token owner,
+already have access to (mirroring "my own unread messages"). A separate,
+minimal bot token (chat:write only) is used purely to DM the digest to you.
+
 Env vars required:
-  SLACK_BOT_TOKEN   - xoxb-... bot token (channels:history, groups:history,
-                       channels:read, groups:read, im:write, chat:write, users:read)
+  SLACK_USER_TOKEN  - xoxp-... user token (User Token Scopes: channels:history,
+                       channels:read, groups:history, groups:read, im:history,
+                       mpim:history, users:read)
+  SLACK_BOT_TOKEN   - xoxb-... bot token (Bot Token Scopes: chat:write, im:write)
+                       used only to open/send the digest DM
   SLACK_USER_ID     - your Slack member ID (e.g. U0123ABC456), DM recipient
   GITHUB_TOKEN      - provided automatically by Actions; needs `models: read`
                        permission for the GitHub Models inference call
@@ -36,13 +44,14 @@ SKIP_SUBTYPES = {
     "channel_name", "bot_add", "bot_remove", "pinned_item", "unpinned_item",
 }
 
+USER_TOKEN = os.environ["SLACK_USER_TOKEN"]
 BOT_TOKEN = os.environ["SLACK_BOT_TOKEN"]
 USER_ID = os.environ["SLACK_USER_ID"]
 GH_TOKEN = os.environ["GITHUB_TOKEN"]
 
 
-def slack_call(method, params=None, post=False):
-    headers = {"Authorization": f"Bearer {BOT_TOKEN}"}
+def slack_call(method, params=None, post=False, token=None):
+    headers = {"Authorization": f"Bearer {token or USER_TOKEN}"}
     if post:
         data = json.dumps(params or {}).encode()
         req = urllib.request.Request(
@@ -62,16 +71,21 @@ def slack_call(method, params=None, post=False):
 
 
 def list_member_channels():
+    """Channels the token owner (you) already belongs to. Uses users.conversations
+    with the user token, so no bot needs to join anything - it's just your own
+    channel membership."""
     channels = []
     cursor = None
     while True:
-        params = {"types": "public_channel,private_channel", "limit": 200, "exclude_archived": "true"}
+        params = {
+            "types": "public_channel,private_channel",
+            "limit": 200,
+            "exclude_archived": "true",
+        }
         if cursor:
             params["cursor"] = cursor
-        result = slack_call("conversations.list", params)
-        for ch in result.get("channels", []):
-            if ch.get("is_member"):
-                channels.append(ch)
+        result = slack_call("users.conversations", params)
+        channels.extend(result.get("channels", []))
         cursor = result.get("response_metadata", {}).get("next_cursor")
         if not cursor:
             break
@@ -165,12 +179,13 @@ def summarize_with_github_models(channel_digests):
 
 
 def send_dm(text):
-    opened = slack_call("conversations.open", {"users": USER_ID}, post=True)
+    opened = slack_call("conversations.open", {"users": USER_ID}, post=True, token=BOT_TOKEN)
     dm_channel = opened["channel"]["id"]
     slack_call(
         "chat.postMessage",
         {"channel": dm_channel, "text": text, "unfurl_links": False, "unfurl_media": False},
         post=True,
+        token=BOT_TOKEN,
     )
 
 
