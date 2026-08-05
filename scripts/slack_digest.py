@@ -92,6 +92,21 @@ def list_member_channels():
     return channels
 
 
+def get_last_read(channel_id):
+    """Slack's own per-channel 'last read' cursor for the token owner - this is
+    exactly what Slack's UI uses to compute the unread badge. Used as the
+    fallback starting point on a channel's first digest run so the very first
+    run captures the *entire* unread backlog, not just a rolling 24h window."""
+    try:
+        result = slack_call("conversations.info", {"channel": channel_id})
+        last_read = result.get("channel", {}).get("last_read")
+        if last_read:
+            return last_read
+    except Exception as e:
+        print(f"warn: could not fetch last_read for {channel_id}: {e}")
+    return None
+
+
 def fetch_history(channel_id, oldest_ts):
     messages = []
     cursor = None
@@ -201,7 +216,13 @@ def main():
     for ch in channels:
         cid = ch["id"]
         name = ch.get("name", cid)
-        oldest = state.get(cid, str(now_ts - LOOKBACK_SECONDS_DEFAULT))
+        if cid in state:
+            oldest = state[cid]
+        else:
+            # First run for this channel: prefer Slack's own unread cursor so we
+            # capture the full backlog, falling back to a rolling 24h window if
+            # last_read isn't available (e.g. never-visited channel).
+            oldest = get_last_read(cid) or str(now_ts - LOOKBACK_SECONDS_DEFAULT)
         try:
             messages = fetch_history(cid, oldest)
         except Exception as e:
